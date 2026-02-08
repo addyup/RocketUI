@@ -4,20 +4,17 @@ import java.io.*;
 import java.util.*;
 import org.springframework.stereotype.Component;
 
+import com.lexer.demo.Utils.BuiltinCommands;
+
 @Component
 public class Executor {
 
-    // Track current directory
-    private File currentDirectory =
-            new File(System.getProperty("user.dir"));
+    private File currentDirectory = new File(System.getProperty("user.dir"));
 
     public File getCurrentDirectory() {
         return currentDirectory;
     }
 
-    /**
-     * Resolve . and .. cleanly
-     */
     private File canonical(File dir) {
         try {
             return dir.getCanonicalFile();
@@ -26,35 +23,23 @@ public class Executor {
         }
     }
 
-    /**
-     * Main execution entry
-     */
-    public String executeAndCapture(PipelineNode pipeline)
-            throws InterruptedException {
-    	// Guard against malformed cd like "cd.."
-    	if (pipeline.commands.size() == 1) {
-    	    CommandNode cmd = pipeline.commands.get(0);
-
-    	    if (cmd.name.startsWith("cd") && !cmd.name.equals("cd")) {
-    	        return "cd: invalid syntax\n";
-    	    }
-    	}
-
-        // ---- BUILT-INS ----
+    public String executeAndCapture(PipelineNode pipeline) {
+        // Only one command in pipeline -> try built-ins first
         if (pipeline.commands.size() == 1) {
             CommandNode cmd = pipeline.commands.get(0);
 
-            if (cmd.name.equals("cd")) {
-                return handleCd(cmd);
+            if (cmd.name.startsWith("cd") && !cmd.name.equals("cd")) {
+                return "cd: invalid syntax\n";
             }
 
-            if (cmd.name.equals("pwd")) {
-                return currentDirectory.getAbsolutePath() + "\n";
-            }
+            // Handle cd / pwd / clear
+            if (cmd.name.equals("cd")) return handleCd(cmd);
+            if (cmd.name.equals("pwd")) return currentDirectory.getAbsolutePath() + "\n";
+            if (cmd.name.equals("clear")) return "__CLEAR__";
 
-            if (cmd.name.equals("clear")) {
-                return "__CLEAR__";
-            }
+            // Handle custom built-ins: ls, rm
+            String builtin = BuiltinCommands.execute(cmd.name + concatArgs(cmd.args), this);
+            if (builtin != null) return builtin;
         }
 
         // ---- EXTERNAL COMMANDS ----
@@ -76,16 +61,10 @@ public class Executor {
 
                 Process process = pb.start();
 
-                // Pipe previous → current
-                if (previous != null) {
-                    pipe(previous.getInputStream(), process.getOutputStream());
-                }
+                if (previous != null) pipe(previous.getInputStream(), process.getOutputStream());
 
-                // Capture output of last command
                 if (i == pipeline.commands.size() - 1 && cmd.redirectOut == null) {
-                    try (BufferedReader reader =
-                                 new BufferedReader(
-                                     new InputStreamReader(process.getInputStream()))) {
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                         String line;
                         while ((line = reader.readLine()) != null) {
                             output.append(line).append("\n");
@@ -96,55 +75,42 @@ public class Executor {
                 processes.add(process);
                 previous = process;
 
-                // Background execution
-                if (cmd.background && i == pipeline.commands.size() - 1) {
-                    return "[running in background]\n";
-                }
+                if (cmd.background && i == pipeline.commands.size() - 1) return "[running in background]\n";
             }
 
-            for (Process p : processes) {
-                p.waitFor();
-            }
+            for (Process p : processes) p.waitFor();
 
-        } catch (IOException e) {
-            // 🔥 THIS IS THE IMPORTANT PART
+        } catch (IOException | InterruptedException e) {
             return "command not found\n";
         }
 
         return output.toString();
     }
 
-    /**
-     * cd implementation (supports cd, cd .., cd ../..)
-     */
     private String handleCd(CommandNode cmd) {
-
         File target;
-
-        if (cmd.args.isEmpty()) {
-            target = new File(System.getProperty("user.home"));
-        } else {
-            target = new File(currentDirectory, cmd.args.get(0));
-        }
+        if (cmd.args.isEmpty()) target = new File(System.getProperty("user.home"));
+        else target = new File(currentDirectory, cmd.args.get(0));
 
         target = canonical(target);
-
-        if (!target.exists() || !target.isDirectory()) {
-            return "cd: no such directory\n";
-        }
+        if (!target.exists() || !target.isDirectory()) return "cd: no such directory\n";
 
         currentDirectory = target;
         return "";
     }
 
-    /**
-     * Pipe streams for pipelines
-     */
     private void pipe(InputStream in, OutputStream out) {
         new Thread(() -> {
             try (in; out) {
                 in.transferTo(out);
             } catch (IOException ignored) {}
         }).start();
+    }
+
+    private String concatArgs(List<String> args) {
+        if (args.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        for (String a : args) sb.append(" ").append(a);
+        return sb.toString();
     }
 }

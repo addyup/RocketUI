@@ -9,6 +9,13 @@ public class Parser {
 	public Parser(List<Token> tokens) {
 		this.tokens = tokens;
 	}
+	public static PipelineNode parseSingleCommand(String command) {
+    Lexer lexer = new Lexer(command);
+    List<Token> tokens = lexer.tokenize();
+    Parser parser = new Parser(tokens);
+    return parser.parse();
+}
+
 	
 	public PipelineNode parse() {
 		PipelineNode pipeline = new PipelineNode();
