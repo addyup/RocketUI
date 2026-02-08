@@ -5,6 +5,7 @@ import java.awt.*;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.io.File;
+import java.io.InputStream;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
@@ -20,11 +21,11 @@ public class SwingShell extends JFrame {
     public SwingShell(Executor executor) {
         this.executor = executor;
 
-        setTitle("ElfHelper");
+        setTitle("RocketUI");
         setSize(800, 500);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
 
-        textArea.setFont(new Font("Menlo", Font.PLAIN, 14));
+        textArea.setFont(loadOrbitronFont(21f));
         textArea.setBackground(Color.BLACK);
         textArea.setForeground(Color.GREEN);
         textArea.setCaretColor(Color.GREEN);
@@ -41,6 +42,8 @@ public class SwingShell extends JFrame {
         setVisible(true);
     }
 
+    
+
     // ---------------- PROMPT ----------------
     private void showPrompt() {
         String prompt = buildPrompt();
@@ -53,7 +56,7 @@ public class SwingShell extends JFrame {
         File dir = executor.getCurrentDirectory();
         String home = System.getProperty("user.home");
         String path = dir.getAbsolutePath().replace(home, "~");
-        return path + " $ ";
+        return path + " ` ";
     }
 
     // ---------------- KEY HANDLING ----------------
@@ -119,4 +122,21 @@ public class SwingShell extends JFrame {
 
         showPrompt();
     }
+
+
+
+
+
+
+    private Font loadOrbitronFont(float size) {
+    try {
+        InputStream is = getClass().getResourceAsStream("/static/fonts/Orbitron-VariableFont_wght.ttf");
+
+        Font font = Font.createFont(Font.TRUETYPE_FONT, is);
+        return font.deriveFont(Font.PLAIN, size);
+    } catch (Exception e) {
+        return new Font("SansSerif", Font.BOLD, (int) size);
+    }
+}
+
 }
